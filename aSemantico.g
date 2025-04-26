@@ -10,6 +10,8 @@ grammar aSemantico;
     HashMap TSG = new HashMap(); // Tabla de símbolos global (para clases, atributos, métodos)
     HashMap TSL = new HashMap(); // Tabla de símbolos local (para variables locales y argumentos)
 
+    HashMap<String, Integer> methodCallCount = new HashMap<>(); // Para rastrear el número de llamadas a cada método
+
     // Tipos definidos
     static final int INT_TYPE = 1;
     static final int DOUBLE_TYPE = 2;
@@ -18,6 +20,7 @@ grammar aSemantico;
     static final int ERROR_TIPO = 5; // ← agregado para errores de tipos
     static final int ERROR_NO_DECLARADO = 6; // ← agregado para variables no declaradas
 
+    ArrayList<String> methodsToDelete = new ArrayList<>();
     ArrayList<String> metodos = new ArrayList<>();
     ArrayList<String> atributos = new ArrayList<>();
     private JTextArea salida;
@@ -49,6 +52,11 @@ grammar aSemantico;
             else if(tipo.equals("double")) TSG.put(id, DOUBLE_TYPE);
             else if(tipo.equals("class")) TSG.put(id, CLASS_TYPE);
             else if(tipo.equals("method")) TSG.put(id, METHOD_TYPE);
+
+            if (tipo.equals("method")) {
+                methodCallCount.put(id, 0); // Inicializar el contador de llamadas en 0
+            }
+
         } else {
             printError("Error redeclarando: " + id, token);
         }
@@ -89,7 +97,25 @@ grammar aSemantico;
 
     public void clearTSL(){
         TSL.clear();
+    }   
+
+    // Metodos para la deteccion de metodos seguros para eliminar
+    public void incrementMethodCallCount(String methodName) {
+        Integer count = methodCallCount.get(methodName);
+        if (count != null) {
+            methodCallCount.put(methodName, count + 1);
+        }
     }
+
+    public void checkMethodsToDelete() {
+        for (String methodName : methodCallCount.keySet()) {
+            Integer callCount = methodCallCount.get(methodName);
+            if (callCount == 0 || callCount == 1) {
+                methodsToDelete.add(methodName);
+            }
+        }
+        generateOptimizationReport();
+    } 
 }
 
 program: clase+;
@@ -101,7 +127,11 @@ clase:
         } else {
             pushTSG($ID.text, "class", $ID);
         }
-    } '{' miembro* '}' { metodos.clear(); atributos.clear(); };
+    } '{' miembro* '}' {
+        metodos.clear();
+        atributos.clear();
+        checkMethodsToDelete();
+    };
 
 miembro: metodo | atributo;
 
@@ -128,7 +158,7 @@ metodo:
         } else {
             metodos.add($ID.text);
             pushTSG($ID.text, "method", $ID);
-        }
+        }   
     } '(' decl_arg? ')' '{' instruccion* '}' { clearTSL(); };
 
 instruccion: asignacion | decl_local;
@@ -181,7 +211,7 @@ decl_local:
             printError("Error redeclarando: " + $id2.text, $id2);
         } else {
             pushTSL($id2.text, $tipo.text, $id2);
-        }
+        }        
     })* SEMICOLON;
 
 // ← expr, multExpr y atom devuelven el tipo de dato para validación semántica
@@ -205,11 +235,17 @@ multExpr returns [int tipo] :
         }
     })* ;
 
-atom returns [int tipo, Token start] :
+atom returns [int tipo, Token start] :   
     CINT {$tipo = INT_TYPE; $start = $CINT;} |
     CDOUBLE {$tipo = DOUBLE_TYPE; $start = $CDOUBLE;} |
-    ID {
-        $start = $ID;
+    ID  {
+        $start = $ID;    
+        if (TSG.get($ID.text) == METHOD_TYPE) {
+              incrementMethodCallCount($ID.text);
+              //System.out.println("Se llamo al metodo" + $ID.text);
+        }
+    
+
         if(findTSL($ID.text)) {
             $tipo = (Integer) TSL.get($ID.text);
         } else if(findTSGForAtom($ID.text)) {
@@ -220,6 +256,22 @@ atom returns [int tipo, Token start] :
         }
     } |
     '(' expr {$tipo = $expr.tipo; $start = $expr.start;} ')' ;
+
+    
+
+
+
+generateOptimizationReport: {
+        if(methodsToDelete.isEmpty()) {
+            printError("No se encontraron métodos para eliminar del programa.");
+        } else {
+            printError("Se pueden eliminar los siguientes métodos para optimizar el programa:");
+            for(String methodName : methodsToDelete){
+                printError(methodName);
+            }
+        }
+
+    };
 
 modificAcceso: PUBLIC | PRIVATE | PROTECTED;
 tipo: INT | DOUBLE | VOID;
