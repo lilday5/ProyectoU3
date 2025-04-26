@@ -65,12 +65,18 @@ grammar aSemantico;
     public void pushTSG(String id, String tipo){
         pushTSG(id, tipo, null);
     }
-
     public void pushTSL(String id, String tipo, Token token){
-        Integer se_encuentra = (Integer) TSL.get(id);
-        if(se_encuentra == null){
-            if(tipo.equals("int")) TSL.put(id, INT_TYPE);
-            else if(tipo.equals("double")) TSL.put(id, DOUBLE_TYPE);
+        Integer se_encuentra_local = (Integer) TSL.get(id);
+        Integer se_encuentra_global = (Integer) TSG.get(id);
+
+        if(se_encuentra_local == null){
+            if(se_encuentra_global != null){
+                 printError("Error redeclarando: " + id, token);
+            }else {
+                    if(tipo.equals("int")) TSL.put(id, INT_TYPE);
+                    else if(tipo.equals("double")) TSL.put(id, DOUBLE_TYPE);
+            }
+
         } else {
             printError("Error redeclarando: " + id, token);
         }
@@ -114,6 +120,12 @@ grammar aSemantico;
                 methodsToDelete.add(methodName);
             }
         }
+
+         for (String methodName : metodos) {
+                if(!methodCallCount.containsKey(methodName)){
+                   methodsToDelete.add(methodName);
+                }
+            }
         generateOptimizationReport();
     } 
 }
@@ -161,7 +173,32 @@ metodo:
         }   
     } '(' decl_arg? ')' '{' instruccion* '}' { clearTSL(); };
 
-instruccion: asignacion | decl_local;
+instruccion
+    : asignacion
+    | decl_local
+    | llamadaMetodo
+    | retorno
+    ;
+
+llamadaMetodo
+    : ID '(' (expr (',' expr)*)? ')' SEMICOLON
+        {
+            // Validar existencia del método y tipos de argumentos
+            if(!metodos.contains($ID.text)) {
+                printError("Error: La función '" + $ID.text + "' no está declarada (línea " + $ID.getLine() + ", columna " + $ID.getCharPositionInLine() + ")", $ID);
+            } else {
+                incrementMethodCallCount($ID.text);
+                printError("La función '" + $ID.text + "' fue llamada. Total llamadas: " + methodCallCount.get($ID.text), $ID);
+            }
+        }
+    ;
+
+retorno
+    : RETURN expr? SEMICOLON
+        {
+            // Aquí podrías validar el tipo de retorno si lo deseas
+        }
+    ;
 
 asignacion: ID '=' expr {
     // ← validación de existencia y tipo al asignar
@@ -169,16 +206,37 @@ asignacion: ID '=' expr {
         printError("Error: " + $ID.text + " no declarado", $ID);
     } else {
         if(findTSL($ID.text)) {
-            if($expr.tipo == (Integer) TSL.get($ID.text)) {
-                // correcto
-            } else {
-                printError("Error de tipos en asignación: " + $ID.text + " y " + $expr.tipo, $ID);
+            if((Integer)TSL.get($ID.text) == INT_TYPE){
+                if($expr.tipo == INT_TYPE) {
+                    // correcto
+                } else {
+                    printError("Error de tipos en asignación: " + $ID.text + " y " + $expr.tipo, $ID);
+                }
+
+            }
+            
+            if((Integer)TSL.get($ID.text) == DOUBLE_TYPE){
+                if($expr.tipo == DOUBLE_TYPE || $expr.tipo == INT_TYPE){
+                    // correcto
+                }else{
+                   printError("Error de tipos en asignación: " + $ID.text + " y " + $expr.tipo, $ID);
+                }
             }
         } else {
-            if($expr.tipo == (Integer) TSG.get($ID.text)) {
-                // correcto
-            } else {
-                printError("Error de tipos en asignación: " + $ID.text + " y " + $expr.tipo, $ID);
+              if((Integer)TSG.get($ID.text) == INT_TYPE){
+                if($expr.tipo == INT_TYPE) {
+                    // correcto
+                } else {
+                    printError("Error de tipos en asignación: " + $ID.text + " y " + $expr.tipo, $ID);
+                }
+
+            }
+            if((Integer)TSG.get($ID.text) == DOUBLE_TYPE){
+                if($expr.tipo == DOUBLE_TYPE || $expr.tipo == INT_TYPE){
+                    // correcto
+                }else{
+                   printError("Error de tipos en asignación: " + $ID.text + " y " + $expr.tipo, $ID);
+                }
             }
         }
     }
@@ -219,6 +277,8 @@ expr returns [int tipo] :
     m1=multExpr {$tipo = $m1.tipo;} (('+' | '-') m2=multExpr {
         if($m1.tipo == $m2.tipo && $m1.tipo != ERROR_TIPO) {
             $tipo = $m1.tipo;
+        }else if (($m1.tipo == DOUBLE_TYPE && $m2.tipo==INT_TYPE) || ($m1.tipo == INT_TYPE && $m2.tipo==DOUBLE_TYPE)) {
+                 $tipo = DOUBLE_TYPE;
         } else {
             $tipo = ERROR_TIPO;
             printError("Error de tipos en suma: " + $m1.tipo + " y " + $m2.tipo, $m1.start);
@@ -229,6 +289,8 @@ multExpr returns [int tipo] :
     a1=atom {$tipo = $a1.tipo;} ('*' a2=atom {
         if($a1.tipo == $a2.tipo && $a1.tipo != ERROR_TIPO && $a1.tipo != ERROR_NO_DECLARADO) {
             $tipo = $a1.tipo;
+        }else if (($a1.tipo == DOUBLE_TYPE && $a2.tipo==INT_TYPE) || ($a1.tipo == INT_TYPE && $a2.tipo==DOUBLE_TYPE)) {
+                 $tipo = DOUBLE_TYPE;
         } else {
             $tipo = ERROR_TIPO;
             printError("Error de tipos en multiplicación: " + $a1.tipo + " y " + $a2.tipo, $a1.start);
@@ -239,10 +301,12 @@ atom returns [int tipo, Token start] :
     CINT {$tipo = INT_TYPE; $start = $CINT;} |
     CDOUBLE {$tipo = DOUBLE_TYPE; $start = $CDOUBLE;} |
     ID  {
-        $start = $ID;    
-        if (TSG.get($ID.text) == METHOD_TYPE) {
+        $start = $ID;   
+
+        Object value = TSG.get($ID.text); 
+        if (Integer.valueOf(METHOD_TYPE).equals(value)) {
               incrementMethodCallCount($ID.text);
-              //System.out.println("Se llamo al metodo" + $ID.text);
+              System.out.println("Se llamo al metodo" + $ID.text);
         }
     
 
@@ -257,21 +321,26 @@ atom returns [int tipo, Token start] :
     } |
     '(' expr {$tipo = $expr.tipo; $start = $expr.start;} ')' ;
 
-    
-
-
-
 generateOptimizationReport: {
+    try {
         if(methodsToDelete.isEmpty()) {
             printError("No se encontraron métodos para eliminar del programa.");
         } else {
             printError("Se pueden eliminar los siguientes métodos para optimizar el programa:");
             for(String methodName : methodsToDelete){
-                printError(methodName);
+                int count = methodCallCount.containsKey(methodName) ? methodCallCount.get(methodName) : 0;
+                printError(methodName + " (llamado " + count + " veces)");
             }
         }
-
-    };
+        // Resumen de todas las llamadas a métodos
+        printError("Resumen de llamadas a métodos:");
+        for(String methodName : methodCallCount.keySet()){
+            printError(methodName + ": " + methodCallCount.get(methodName) + " veces");
+        }
+    } catch (Exception e) {
+        printError("Error al generar el reporte de optimización: " + e.getMessage());
+    }
+};
 
 modificAcceso: PUBLIC | PRIVATE | PROTECTED;
 tipo: INT | DOUBLE | VOID;
@@ -286,6 +355,7 @@ COMMA: ',';
 SEMICOLON: ';';
 
 CDOUBLE: CINT '.' CINT;
+RETURN: 'return';
 ID: ('a' ..'z' | 'A' ..'Z')+('0' ..'9')*;
 CINT: ('0' ..'9')+;
 

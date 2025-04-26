@@ -9,11 +9,11 @@ import java.io.FileReader;
 import java.io.IOException;
 import org.antlr.runtime.*;
 
-public class test extends JFrame {
+public class AnalizadorSemanticoGUI extends JFrame {
     private JTextArea taEntrada, taSalida;
     private JButton btnAnalizar, btnCargar, btnLimpiar;
 
-    public test() {
+    public AnalizadorSemanticoGUI() {
         setTitle("Analizador Semántico");
         setSize(600, 400);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
