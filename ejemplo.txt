@@ -1,0 +1,34 @@
+public class Ejemplo {
+    int contador;
+    double resultado;
+    
+    public int sumar(int a, int b) {
+        int suma;
+        suma = a + b;
+        contador = contador + 1;
+        return suma;              
+    }
+    
+    private double calcular(int x, double y) {
+        double res;
+        res = x * y;
+        return res;             
+    }
+    
+
+    public void mostrar() {
+        int temp;
+       sumar(5, 3); 
+        calcular(temp, 2.5);  
+    }
+    
+    private int metodoSinUso(int z) {
+        return z * 2;
+    }
+    
+    
+    public void ejecutar() {
+        mostrar();         
+        calcular(10, 2.0);  
+    }
+}
