@@ -45,7 +45,11 @@ eval_input: testlist NEWLINE* EOF;
 decorator: '@' dotted_name ( '(' arglist? ')' )? NEWLINE;
 decorators: decorator+;
 decorated: decorators (classdef | funcdef);
-funcdef: 'def' NAME parameters ':' suite;
+
+// === DEFINICIÓN DE FUNCIÓN/MÉTODO ===
+// Interceptar en el visitor para registrar funciones/métodos en la tabla de símbolos
+
+funcdef: 'def' NAME parameters ':' suite; // <-- Interceptar en el visitor
 parameters: '(' varargslist? ')';
 varargslist: ((fpdef ('=' test)? ',')*
               ('*' NAME (',' '**' NAME)? | '**' NAME) |
@@ -122,7 +126,11 @@ shift_expr: arith_expr (('<<'|'>>') arith_expr)*;
 arith_expr: term (('+'|'-') term)*;
 term: factor (('*'|'/'|'%'|'//') factor)*;
 factor: ('+'|'-'|'~') factor | power;
-power: atom trailer* ('**' factor)?;
+
+// === LLAMADA A FUNCIÓN/MÉTODO ===
+// Una llamada es un atom seguido de uno o más trailers con paréntesis
+
+power: atom trailer* ('**' factor)?; // <-- Interceptar en el visitor
 atom: ('(' (yield_expr|testlist_comp)? ')' |
        '[' listmaker? ']' |
        '{' dictorsetmaker? '}' |

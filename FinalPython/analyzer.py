@@ -13,18 +13,15 @@ def analizar_codigo_fuente(codigo):
     visitor = MethodUsageVisitor()
     visitor.visit(tree)
 
-    # Excluir funciones llamadas desde fuera de clase (nivel global)
-    for f in visitor.llamadas_fuera_de_clase:
-        visitor.funciones_llamadas[f] = max(visitor.funciones_llamadas.get(f, 0), 2)
-
-    resultado = "=== Funciones llamadas 0 veces ===\n"
-    for f in sorted(visitor.funciones_definidas):
-        if visitor.funciones_llamadas.get(f, 0) == 0:
-            resultado += f"- {f}\n"
-
-    resultado += "\n=== Funciones llamadas 1 vez ===\n"
-    for f in sorted(visitor.funciones_definidas):
-        if visitor.funciones_llamadas.get(f, 0) == 1:
-            resultado += f"- {f}\n"
-
-    return resultado.strip(), visitor.funciones_definidas, visitor.funciones_llamadas
+    resultado = "=== Reporte de uso de funciones/métodos ===\n"
+    funciones_detectadas = set()
+    funciones_llamadas = {}
+    for entry in visitor.symbol_table.values():
+        funciones_detectadas.add(entry.name)
+        funciones_llamadas[entry.name] = entry.calls
+        resultado += f"- {entry.name} (definida en línea {entry.defined_at}): {entry.calls} llamadas\n"
+        if entry.calls == 0:
+            resultado += "  -> SUGERENCIA: Esta función/método NO es llamada. Puede optimizarse/eliminarse.\n"
+        elif entry.calls == 1:
+            resultado += "  -> SUGERENCIA: Solo se llama una vez. Puede optimizarse.\n"
+    return resultado.strip(), funciones_detectadas, funciones_llamadas

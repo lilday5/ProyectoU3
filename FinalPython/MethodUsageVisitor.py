@@ -1,44 +1,49 @@
 from PythonParserVisitor import PythonParserVisitor
 
+class SymbolTableEntry:
+    def __init__(self, name, defined_at):
+        # Almacena la información de cada función/método
+        self.name = name  # Nombre de la función/método
+        self.defined_at = defined_at  # Línea donde se definió
+        self.calls = 0  # Número de veces que fue llamada
+        self.called_at = []  # Líneas donde fue llamada
+
 class MethodUsageVisitor(PythonParserVisitor):
     def __init__(self):
-        self.funciones_definidas = set()
-        self.funciones_llamadas = {}
-        self.llamadas_fuera_de_clase = set()  # para marcar funciones llamadas desde el nivel global
+        # Tabla de símbolos: nombre -> SymbolTableEntry
+        self.symbol_table = {}
+        self.llamadas_fuera_de_clase = set()  # (Reservado para futuras mejoras)
 
     def visitFuncdef(self, ctx):
+        """
+        Intercepta la definición de funciones/métodos.
+        Agrega la función a la tabla de símbolos con su línea de definición.
+        """
         nombre = ctx.NAME().getText()
-        self.funciones_definidas.add(nombre)
-        self.funciones_llamadas[nombre] = 0
+        line = ctx.start.line if hasattr(ctx, 'start') else None
+        if nombre not in self.symbol_table:
+            self.symbol_table[nombre] = SymbolTableEntry(nombre, line)
         return self.visitChildren(ctx)
 
     def visitPower(self, ctx):
+        """
+        Intercepta llamadas a funciones/métodos.
+        Si el atom es una función definida, incrementa el contador de llamadas y almacena la línea.
+        Si no estaba en la tabla de símbolos, la agrega como llamada sin definición.
+        """
         atom = ctx.atom()
         trailers = ctx.trailer()
-
         if atom and trailers:
-            last = trailers[-1]
-            if hasattr(last, 'LPAR') and last.LPAR():
-                nombre = None
-
-                if len(trailers) >= 2 and hasattr(trailers[-2], 'NAME'):
-                    nombre = trailers[-2].NAME().getText()  # obj.metodo()
-                else:
-                    nombre = atom.getText()  # llamada directa: metodo()
-
-                # detecta si la llamada ocurrió desde fuera de clase
-                if nombre in self.funciones_llamadas:
-                    self.funciones_llamadas[nombre] += 1
-
-                    padre = ctx.parentCtx
-                    dentro_de_clase = False
-                    while padre:
-                        if hasattr(padre, 'classdef'):
-                            dentro_de_clase = True
-                            break
-                        padre = padre.parentCtx
-
-                    if not dentro_de_clase:
-                        self.llamadas_fuera_de_clase.add(nombre)
-
+            for t in trailers:
+                if hasattr(t, 'LPAR') and t.LPAR():  # Detecta llamada tipo foo() o self.foo()
+                    nombre = atom.getText()
+                    if nombre in self.symbol_table:
+                        self.symbol_table[nombre].calls += 1
+                        if hasattr(ctx, 'start'):
+                            self.symbol_table[nombre].called_at.append(ctx.start.line)
+                    else:
+                        self.symbol_table[nombre] = SymbolTableEntry(nombre, None)
+                        self.symbol_table[nombre].calls = 1
+                        if hasattr(ctx, 'start'):
+                            self.symbol_table[nombre].called_at.append(ctx.start.line)
         return self.visitChildren(ctx)
