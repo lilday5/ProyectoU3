@@ -50,6 +50,7 @@ decorated: decorators (classdef | funcdef);
 // Interceptar en el visitor para registrar funciones/métodos en la tabla de símbolos
 
 funcdef: 'def' NAME parameters ':' suite; // <-- Interceptar en el visitor
+
 parameters: '(' varargslist? ')';
 varargslist: ((fpdef ('=' test)? ',')*
               ('*' NAME (',' '**' NAME)? | '**' NAME) |
